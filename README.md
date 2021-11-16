@@ -9,26 +9,46 @@ Before submitting your first milestone, _you must get your project idea and scop
 Start off by forking this repository. In your README, write a design doc to outline your project goals and implementation plan. It must include the following sections:
 
 #### Introduction
-- What motivates your project?
+For this project, I will create a WebGL-based procedural bird generator that mimics the style of scientific illustrations. This will be based on an SDF generator connected to a post-process shader pipeline. Users will be able to modify the bird's anatomy and colors using various dat.GUI parameters.
 
 #### Goal
-- What do you intend to achieve with this project?
+My goal is to build a parameterized and highly stylized toy that incorporates  2D and 3D SDF modeling along with NPR stylizations for crosshatching and painterly rendering.
+
 
 #### Inspiration/reference:
-- You must have some form of reference material for your final project. Your reference may be a research paper, a blog post, some artwork, a video, another class at Penn, etc.  
-- Include in your design doc links to and images of your reference material.
+<p align="center">
+<img src="images/bird1.jpeg" alt="drawing" width="200"/>
+<img src="images/bird2.jpeg" alt="drawing" width="200"/>
+<img src="images/bird3.jpeg" alt="drawing" width="400"/>
+</p>
+<p align= "center">
 
 #### Specification:
-- Outline the main features of your project.
+- Bird SDF Generator: A bird model constructed using SDF modeling. This will be structured based on a scene graph. Different aspects of the bird (such as beak size/shape, wing size, etc.) will be editable through the WebGL GUI.
+
+- Procedural bird textures: These will be generated using noise and 2D SDFs, then projected onto the bird SDF model. Users will be able to control the bird's color palette through the WebGL GUI as well.
+
+- Scientific illustration shading model: A combination of cross hatching, edge detection, and painterly rendering filters. These will all be done in a single GLSL post-process shader and layered on top of one another. For painterly rendering, I will adapt the shading model from the paper Art-directed watercolor stylization of 3D animations in real-time, by Montesdeoca et al, which I previously worked with in my Senior Design project last year.
 
 #### Techniques:
-- What are the main technical/algorithmic tools you’ll be using? Give an overview, citing specific papers/articles.
+- Cross Hatching using Tonal Art Maps: https://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.9.5039&rep=rep1&type=pdf
+
+- Cross Hatching in a shader: https://www.shadertoy.com/view/MsKfRw
+
+- Watercolor shading model: https://artineering.io/publications/Art-Directed-Watercolor-Stylization-of-3D-Animations-in-Real-Time/
 
 #### Design:
-- How will your program fit together? Make a simple free-body diagram illustrating the pieces.
+<p align="center">
+<img src="images/design.png" alt="drawing" width="500"/>
+</p>
+<p align= "center">
 
 #### Timeline:
-- Create a week-by-week set of milestones for each person in your group. Make sure you explicitly outline what each group member's duties will be.
+- Week 1: Implement base WebGL pipeline that allows buffers to be passed properly between SDF flat shader, post process shader, and final output buffer. Create base SDF bird model with flat shading and noise-based textures.
+
+- Week 2: Complete scientific illustration model with cross hatching and painterly shading. Continue refining bird model, refine lighting, and create 2D SDF textures.
+
+- Week 3: Refine bird scene and post process shaders. Add background/polish elements such as tree trunk and shadowed floor.
 
 Submit your Design doc as usual via pull request against this repository.
 ## Milestone 2: Implementation part 1 (due 11/22)
@@ -41,12 +61,12 @@ Submission: Add a new section to your README titled: Milestone #1, which should 
 - Examples of your generators output so far
 We'll check your repository for updates. No need to create a new pull request.
 ## Milestone 3: Implementation part 2 (due 11/29)
-We're over halfway there! This week should be about fixing bugs and extending the core of your generator. Make sure by the end of this week _your generator works and is feature complete._ Any core engine features that don't make it in this week should be cut! Don't worry if you haven't managed to exactly hit your goals. We're more interested in seeing proof of your development effort than knowing your planned everything perfectly. 
+We're over halfway there! This week should be about fixing bugs and extending the core of your generator. Make sure by the end of this week _your generator works and is feature complete._ Any core engine features that don't make it in this week should be cut! Don't worry if you haven't managed to exactly hit your goals. We're more interested in seeing proof of your development effort than knowing your planned everything perfectly.
 
 Put all your code in your forked repository.
 
 Submission: Add a new section to your README titled: Milestone #3, which should include
-- written description of progress on your project goals. If you haven't hit all your goals, what did you have to cut and why? 
+- written description of progress on your project goals. If you haven't hit all your goals, what did you have to cut and why?
 - Detailed output from your generator, images, video, etc.
 We'll check your repository for updates. No need to create a new pull request.
 
@@ -58,7 +78,7 @@ Time to polish! Spen this last week of your project using your generator to prod
 Submission:
 - Push all your code / files to your repository
 - Come to class ready to present your finished project
-- Update your README with two sections 
+- Update your README with two sections
   - final results with images and a live demo if possible
   - post mortem: how did your project go overall? Did you accomplish your goals? Did you have to pivot?
 
@@ -68,7 +88,7 @@ Submission:
 
 ### A CLASSIC 4K DEMO
 - In the spirit of the demo scene, create an animation that fits into a 4k executable that runs in real-time. Feel free to take inspiration from the many existing demos. Focus on efficiency and elegance in your implementation.
-- Example: 
+- Example:
   - [cdak by Quite & orange](https://www.youtube.com/watch?v=RCh3Q08HMfs&list=PLA5E2FF8E143DA58C)
 
 ### A RE-IMPLEMENTATION

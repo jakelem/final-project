@@ -620,6 +620,6 @@ void main() {
         col += vec3(0.20, 0.21, 0.23) * albedo;
     }
         
-    out_Col = vec4(col, 1.0);
+    out_Col = vec4(albedo, 1.0);
     //out_Col = vec4(fs_Pos + 1.0, 0.0, 1.0);
 }

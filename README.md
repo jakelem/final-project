@@ -60,6 +60,36 @@ Submission: Add a new section to your README titled: Milestone #1, which should 
 - written description of progress on your project goals. If you haven't hit all your goals, what's giving you trouble?
 - Examples of your generators output so far
 We'll check your repository for updates. No need to create a new pull request.
+
+#### Progress:
+
+- Implemented WebGL pipeline with post process shader (currently a no operation passthrough).
+
+- Modeled basic bird anatomy with SDFs.
+
+- Added several parameters for bird generation, such as weight, skull size, and beak size.
+
+#### Output Examples:
+<p align="center">
+<img src="images/m2_bird1.png" alt="drawing" width="400"/>
+</p>
+<p align= "center">
+
+<p align="center">
+<img src="images/m2_bird2.png" alt="drawing" width="400"/>
+</p>
+<p align= "center">
+
+<p align="center">
+<img src="images/m2_bird3.png" alt="drawing" width="400"/>
+</p>
+<p align= "center">
+
+<p align="center">
+<img src="images/m2_bird4.png" alt="drawing" width="400"/>
+</p>
+<p align= "center">
+
 ## Milestone 3: Implementation part 2 (due 11/29)
 We're over halfway there! This week should be about fixing bugs and extending the core of your generator. Make sure by the end of this week _your generator works and is feature complete._ Any core engine features that don't make it in this week should be cut! Don't worry if you haven't managed to exactly hit your goals. We're more interested in seeing proof of your development effort than knowing your planned everything perfectly.
 

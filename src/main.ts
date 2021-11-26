@@ -211,11 +211,11 @@ function main() {
       square,
     ], time);
 
-    post.setBaseColorTexture(flat.targetTexture)
+    //post.setBaseColorTexture(flat.targetTexture)
 
-    renderer.render(camera, post, [
+    /*renderer.render(camera, post, [
       square,
-    ], time);
+    ], time);*/
     
     time++;
     stats.end();
@@ -244,7 +244,7 @@ function main() {
   flat.setDimensions(window.innerWidth, window.innerHeight);
   flat.setSize(window.innerWidth, window.innerHeight);
   post.setSize(window.innerWidth, window.innerHeight);
-  flat.createFrameBuffer();
+  //flat.createFrameBuffer();
 
   setAllBirdParams()
   // Start the render loop

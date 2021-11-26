@@ -340,7 +340,6 @@ float feather(vec3 p, vec3 a, vec3 b, float r1, float r2, vec3 cutOffset, float 
     vec3 dir = 3.0 * normalize(a - b);
     float cutCone = roundCone(p + cutOffset, a + dir, b - dir, r1 * 1.1, r2 * 1.1);
     return smax(cone1, -cutCone, 0.01);
-    //return smin(cone1, cutCone, 0.01);
 }
 
 
@@ -382,11 +381,11 @@ float sdfFeatherTexture(vec2 uv, float freq, float amp, float radius) {
     vec2 cellNum = floor((uv) / period);
     float r= length(cellNum);
    // if(length(cellNum) < 7.0) {
-        if(sdf < 0.0) {
-            res = clamp(1.0 + sdf * 9.0, 0.0, 1.0);
-        } else {
-            res = -1.0;
-        }
+    if(sdf < 0.0) {
+        res = clamp(1.0 + sdf * 9.0, 0.0, 1.0);
+    } else {
+        res = -1.0;
+    }
         // clamp(1.0 - abs(sdf * sdf * 200.0), 0.0, 1.0);
     //} else {
         //res = -1.0;
@@ -415,8 +414,8 @@ float sinFeatherTexture(vec2 uv, float freq, float amp) {
     
     // Featherwave is the cutoff for the sin function
     //if(featherwave < 0.0) {
-        f = clamp(f + 0.2, 0.0, 1.0);
-        res = f * waveoffset;
+    f = clamp(f + 0.2, 0.0, 1.0);
+    res = f * waveoffset;
         
         
     //} else {
@@ -426,7 +425,15 @@ float sinFeatherTexture(vec2 uv, float freq, float amp) {
     return res;
 }
 
+//Todo: eyepattern
 Material eyePattern(vec3 p, vec3 normal) {
+    Material res;
+    res.color = vec3(1.0);
+    return res;
+}
+
+//Todo: beakpattern
+Material beakPattern(vec3 p, vec3 normal) {
     Material res;
     res.color = vec3(1.0);
     return res;
@@ -825,7 +832,7 @@ MapQuery map(vec3 p)
 
 MapQuery boundedMap(vec3 p)
 {
-    MapQuery boundingBox = MapQuery(sphere(p, 8.04), 0);
+    MapQuery boundingBox = MapQuery(sphere(p + vec3(0.0, -3.0, 0.0), 7.0), 0);
     if(boundingBox.dist < 0.001) {
         return map(p);
     }
@@ -1078,13 +1085,6 @@ void main() {
         vec3 normal = calcNormals(query.isect);
         //vec3 tangent = normalize(cross(vec3(0,1,0),normal));
         //vec3 bitangent = normalize(cross(normal, tangent));
-
-        if(query.material == bodyMaterial || query.material == headMaterial) {
-            float distToHead = clamp(distance(headPos, query.isect) * 0.2, 0.0, 1.0);
-            albedo = mix(vec3(0.4,0.4,0.42), vec3(0.6,0.0,0.1) , distToHead);
-
-        }
-        
 
         float kd = 1.0;
         float ks = 0.1;

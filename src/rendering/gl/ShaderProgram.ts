@@ -30,12 +30,19 @@ class ShaderProgram {
   unifDimensions: WebGLUniformLocation;
   unifTime: WebGLUniformLocation;
   unifTexture: WebGLUniformLocation;
+  unifDepthTexture: WebGLUniformLocation;
   unifViewProj: WebGLUniformLocation;
   unifBirdParams: WebGLUniformLocation;
+  unifColorParams: WebGLUniformLocation;
 
   colorTexture : WebGLUniformLocation;
-  frameBuffer : WebGLUniformLocation;
-  targetTexture : WebGLUniformLocation;
+  depthTexture : WebGLUniformLocation;
+
+  frameBuffer1 : WebGLUniformLocation;
+
+  targetTexture1 : WebGLUniformLocation;
+  targetTexture2 : WebGLUniformLocation;
+
   targetTextureWidth : number;
   targetTextureHeight : number;
   devicePixelRatio : number;
@@ -64,8 +71,11 @@ class ShaderProgram {
     this.unifDimensions   = gl.getUniformLocation(this.prog, "u_Dimensions");
     this.unifTime   = gl.getUniformLocation(this.prog, "u_Time");
     this.unifTexture   = gl.getUniformLocation(this.prog, "u_Texture");
+    this.unifDepthTexture   = gl.getUniformLocation(this.prog, "u_DepthTexture");
+
     this.unifViewProj   = gl.getUniformLocation(this.prog, "u_ViewProj");
     this.unifBirdParams   = gl.getUniformLocation(this.prog, "u_BirdParameters");
+    this.unifColorParams   = gl.getUniformLocation(this.prog, "u_ColorParameters");
 
     this.devicePixelRatio = 1.0;
 
@@ -108,17 +118,21 @@ class ShaderProgram {
   setViewProjMatrix(vp: mat4) {
     this.use();
     if (this.unifViewProj !== -1) {
-      //console.log("setting viewproj")
       gl.uniformMatrix4fv(this.unifViewProj, false, vp);
     }
   }
 
-
   setBirdParams(params:Array<number>) {
     this.use();
     if (this.unifBirdParams !== -1) {
-      console.log("setting birdparams")
       gl.uniform1fv(this.unifBirdParams, params, 0, 20)
+    }
+  }
+
+  setBirdColors(colors:Array<number>) {
+    this.use();
+    if (this.unifColorParams !== -1) {
+      gl.uniform3fv(this.unifColorParams, colors, 0, 15)
     }
   }
 
@@ -147,29 +161,33 @@ class ShaderProgram {
       gl.uniform1i(this.unifTexture, 0);
     }
 
+    if (this.unifDepthTexture != -1) {
+      gl.activeTexture(gl.TEXTURE1); //GL supports up to 32 different active textures at once(0 - 31)
+      gl.bindTexture(gl.TEXTURE_2D, this.depthTexture);
+      gl.uniform1i(this.unifDepthTexture, 1);
+    }
+
     d.bindIdx();
 
     if(this.frameBufferBound) {
       // render to our targetTexture by binding the framebuffer
-      gl.bindFramebuffer(gl.FRAMEBUFFER, this.frameBuffer);
-      gl.bindTexture(gl.TEXTURE_2D, this.targetTexture);
-      let aspect = this.innerWidth / this.innerHeight;
+      gl.bindFramebuffer(gl.FRAMEBUFFER, this.frameBuffer1);
       gl.viewport(0, 0, this.innerWidth, this.innerHeight);
-
+      
       // Tell WebGL how to convert from clip space to pixels
 
       // Clear the attachment(s).
       gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+      let drawBuffers : Array<GLenum> = [gl.COLOR_ATTACHMENT0, gl.COLOR_ATTACHMENT1];
+      gl.drawBuffers(drawBuffers);
 
     } else {
       gl.bindFramebuffer(gl.FRAMEBUFFER, null);
       gl.viewport(0, 0, this.innerWidth, this.innerHeight);
 
       let aspect = this.innerWidth / this.innerHeight;
-     // console.log(aspect)
       let projectionMatrix = mat4.create();
       mat4.perspective(projectionMatrix, 60, aspect, 0.0, 0.3);
-      //console.log(projectionMatrix)
       this.setViewProjMatrix(projectionMatrix)
     }
 
@@ -184,33 +202,38 @@ class ShaderProgram {
     gl.uniform1i(this.unifTexture, 0);
   }
 
+  setDepthTexture(texture:WebGLUniformLocation) {
+    this.use();
+    this.depthTexture = texture;
+    gl.uniform1i(this.unifDepthTexture, 1);
+  }
+
  frameBufferResize() {
     gl.viewport(0, 0, this.innerWidth, this.innerHeight);
-    gl.bindTexture(gl.TEXTURE_2D, this.targetTexture);
+    gl.bindTexture(gl.TEXTURE_2D, this.targetTexture1);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, this.innerWidth, 
       this.innerHeight, 0, gl.RGB, gl.UNSIGNED_BYTE, null);
 
+    gl.bindTexture(gl.TEXTURE_2D, this.targetTexture2);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, this.innerWidth, 
+      this.innerHeight, 0, gl.RGB, gl.UNSIGNED_BYTE, null);
+  
  }
  
-  createFrameBuffer() {
+  createFrameBuffer1() {
         // create to render to
-    this.targetTexture = gl.createTexture();
-    this.frameBuffer = gl.createFramebuffer();
-    gl.bindFramebuffer(gl.FRAMEBUFFER, this.frameBuffer)
+    this.targetTexture1 = gl.createTexture();
+    this.frameBuffer1 = gl.createFramebuffer();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.frameBuffer1)
 
     this.targetTextureWidth = this.innerWidth;
     this.targetTextureHeight = this.innerHeight;
 
-    gl.bindTexture(gl.TEXTURE_2D, this.targetTexture);
+    gl.bindTexture(gl.TEXTURE_2D, this.targetTexture1);
     // define size and format of level 0
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, this.innerWidth, 
       this.innerHeight, 0, gl.RGB, gl.UNSIGNED_BYTE, null);
 
-
-    // gl.texImage2D(gl.TEXTURE_2D, level, internalFormat,
-    //               this.innerWidth * devicePixelRatio, this.innerHeight * devicePixelRatio, border,
-    //               format, type, texData);
-  
     // set the filtering so we don't need mips
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
@@ -218,14 +241,40 @@ class ShaderProgram {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
 
     // Create and bind the framebuffer
-    gl.bindFramebuffer(gl.FRAMEBUFFER, this.frameBuffer);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.frameBuffer1);
     gl.viewport(0, 0, this.targetTextureWidth, this.targetTextureHeight);
     this.frameBufferBound = true;
 
     // attach the texture as the first color attachment
     gl.framebufferTexture2D(
-    gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.targetTexture, 0);
+    gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.targetTexture1, 0);
   
+    // create to render to
+    this.targetTexture2 = gl.createTexture();
+    this.targetTextureWidth = this.innerWidth;
+    this.targetTextureHeight = this.innerHeight;
+
+    gl.bindTexture(gl.TEXTURE_2D, this.targetTexture2);
+    // define size and format of level 0
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, this.innerWidth, 
+      this.innerHeight, 0, gl.RGB, gl.UNSIGNED_BYTE, null);
+
+    // set the filtering so we don't need mips
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+    // Create and bind the framebuffer
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.frameBuffer1);
+    gl.viewport(0, 0, this.targetTextureWidth, this.targetTextureHeight);
+    this.frameBufferBound = true;
+
+    // attach the texture as the second color attachment
+    gl.framebufferTexture2D(
+    gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT1, gl.TEXTURE_2D, this.targetTexture2, 0);
+    
+    
   }
 };
 

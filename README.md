@@ -1,12 +1,6 @@
 # Final Project!
 
-This is it! The culmination of your procedural graphics experience this semester. For your final project, we'd like to give you the time and space to explore a topic of your choosing. You may choose any topic you please, so long as you vet the topic and scope with an instructor or TA. We've provided some suggestions below. The scope of your project should be roughly 1.5 homework assignments). To help structure your time, we're breaking down the project into 4 milestones:
-
-## Milestone 1: Project planning (due 11/15)
-Before submitting your first milestone, _you must get your project idea and scope approved by Rachel, Adam or a TA._
-
-### Design Doc
-Start off by forking this repository. In your README, write a design doc to outline your project goals and implementation plan. It must include the following sections:
+Demo: https://jakelem.github.io/final-project/
 
 #### Introduction
 For this project, I will create a WebGL-based procedural bird generator that mimics the style of scientific illustrations. This will be based on an SDF generator connected to a post-process shader pipeline. Users will be able to modify the bird's anatomy and colors using various dat.GUI parameters.
@@ -93,6 +87,39 @@ Submission: Add a new section to your README titled: Milestone #3, which should 
 We'll check your repository for updates. No need to create a new pull request.
 
 Come to class on the due date with a WORKING COPY of your project. We'll be spending time in class critiquing and reviewing your work so far.
+
+#### Progress:
+- Implemented various procedural bird textures that are projected onto the bird. These are a combination of sin-wave based textures and 2D SDF textures.
+
+- Created custom shading model in order to simulate colored pencil drawing/tapestry. This takes aspects of the watercolor and hatching shading models and plays around with parameters for a new aesthetic. Much of the coloring is done through textures rather than actual physically based lighting, because I wanted it to look like a flat illustration. In the current pipeline, I take the luminosity values from the fragment shader and passes them to the post process shader as a displacement map, which is then used to offset the normals of the flat image. This creates an embossed effect and gives a little more dimensionality to the output.
+
+- The final result doesn't really look like a hand drawn illustration, so I want to play around more for the final milestone and try to match my references as closely as I can.
+
+#### Output Examples:
+<p align="center">
+<img src="images/m3_bird1.png" alt="drawing" width="400"/>
+</p>
+<p align= "center">
+
+<p align="center">
+<img src="images/m3_bird2.png" alt="drawing" width="400"/>
+</p>
+<p align= "center">
+
+<p align="center">
+<img src="images/m3_bird3.png" alt="drawing" width="400"/>
+</p>
+<p align= "center">
+
+<p align="center">
+<img src="images/m3_bird4.png" alt="drawing" width="400"/>
+</p>
+<p align= "center">
+
+<p align="center">
+<img src="images/m3_bird6.png" alt="drawing" width="400"/>
+</p>
+<p align= "center">
 
 ## Final submission (due 12/6)
 Time to polish! Spen this last week of your project using your generator to produce beautiful output. Add textures, tune parameters, play with colors, play with camera animation. Take the feedback from class critques and use it to take your project to the next level.

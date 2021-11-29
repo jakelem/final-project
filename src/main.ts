@@ -7,6 +7,7 @@ import OpenGLRenderer from './rendering/gl/OpenGLRenderer';
 import Camera from './Camera';
 import {setGL} from './globals';
 import ShaderProgram, {Shader} from './rendering/gl/ShaderProgram';
+var randGen = require('random-seed');
 
 // Define an object with application parameters and button callbacks
 // This will be referred to by dat.GUI's functions that add GUI elements.
@@ -47,7 +48,9 @@ const controls = {
   'Color 2': [15,15,18],
   'Color 3': [17,15,15],
   'Color 4': [255,245,233],
-  'Color 5': [255,245,233],
+  'Color 5': [167,88,10],
+
+  'Texture Seed' : 0.0,
 
 };
 
@@ -55,7 +58,6 @@ let square: Square;
 let time: number = 0;
 let birdParams: Array<number>;
 let colorParams: Array<number>;
-
 function loadScene() {
   square = new Square(vec3.fromValues(0, 0, 0));
   square.create();
@@ -70,6 +72,16 @@ function normalizeColArr(colArr : number[]) {
   return [colArr[0] / 255.0, colArr[1] / 255.0, colArr[2] / 255.0];
 }
 
+function updateGUI(g : any) {
+  for (let i in g.__controllers) {
+    g.__controllers[i].updateDisplay();
+  }
+
+  for (let i in g.__folders) {
+    updateGUI(g.__folders[i]);
+  }
+}
+
 function main() {
   birdParams = new Array<number>();
   colorParams = new Array<number>();
@@ -77,19 +89,6 @@ function main() {
   for(let i = 0; i < 20; ++i) {
     birdParams.push(0.0);
   }
-
-  window.addEventListener('keypress', function (e) {
-    // console.log(e.key);
-    switch(e.key) {
-      // Use this if you wish
-    }
-  }, false);
-
-  window.addEventListener('keyup', function (e) {
-    switch(e.key) {
-      // Use this if you wish
-    }
-  }, false);
 
   // Initial display for framerate
   const stats = Stats();
@@ -145,6 +144,10 @@ function main() {
     setAllBirdParams()
   });
 
+  gui.add(controls, 'Texture Seed').onChange( function() {
+    setAllBirdParams()
+  });
+
   gui.addColor(controls, 'Color 1').onChange( function() {
     setAllBirdParams()
   });
@@ -165,6 +168,30 @@ function main() {
     setAllBirdParams()
   });
 
+
+  window.addEventListener('keypress', function (e) {
+    // console.log(e.key);
+    switch(e.key) {
+      case 'r':
+        controls["Texture Seed"]+=1.0;
+        updateGUI(gui)
+        setAllBirdParams()
+        break
+      case 'e':
+        controls["Texture Seed"]-=1.0;
+        updateGUI(gui)
+        setAllBirdParams()
+        break
+    }
+  }, false);
+
+  window.addEventListener('keyup', function (e) {
+    switch(e.key) {
+      // Use this if you wish
+    }
+  }, false);
+  
+
   function setAllBirdParams() {
     /*
     let lowerBodyWidth = controls['Weight'] * 0.9 + 0.1;
@@ -172,6 +199,8 @@ function main() {
     let upperNeckWidth = controls['Neck Width'] * controls['Weight'] * 0.9;
     let lowerNeckWidth = mix(upperNeckWidth, breastWidth, 0.4);
     let headWidth = mix(upperNeckWidth, 0.7, 0.8);*/
+    //let rand = randGen.create();
+    //this.rand.seed(this.seed);
 
     birdParams[0] = controls['Weight'];  
     birdParams[1] = controls['Neck Length'];  
@@ -184,6 +213,7 @@ function main() {
     birdParams[8] = controls['Skull Length'];  
     birdParams[9] = controls['Beak Height'];  
     birdParams[10] = controls['Beak Length'];  
+    birdParams[11] = controls['Texture Seed'] * 0.0001;  
 
     flat.setBirdParams(birdParams);
 
@@ -273,6 +303,8 @@ function main() {
     flat.frameBufferResize();
 
   }, false);
+
+  
 
   renderer.setSize(window.innerWidth, window.innerHeight);
   camera.setAspectRatio(window.innerWidth / window.innerHeight);

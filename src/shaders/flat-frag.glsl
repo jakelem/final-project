@@ -25,12 +25,16 @@ vec3 headPos = vec3(0.0);
 vec3 wingPos = vec3(0.0);
 vec3 eyePos = vec3(0.0);
 vec3 bodyPos = vec3(0.0);
+vec3 beakTipPos = vec3(0.0);
 
 vec3 breastPos = vec3(0.0);
 vec3 tailBonePos = vec3(0.0);
 float lowerBodyWidth = 0.0;
 vec3 footPos = vec3(0.0, -1.0, 0.0);
 float legHeight = 0.0;
+
+float randomSeed = 0.0;
+
 
 uniform float[20] u_BirdParameters;
 uniform vec3[5] u_ColorParameters;
@@ -55,6 +59,7 @@ struct Material
     float ks;
     float cosPow;
     float displacement;
+    int id;
 };
 
 struct MixedMaterial
@@ -88,6 +93,22 @@ vec2 hash2vec2(vec2 v) {
 float hash1(float v)
 {
     return fract(sin(v * 323359.34829489 + v * 9852.555));
+}
+
+float randomFloat()
+{
+    randomSeed += 0.1;
+    return hash1(randomSeed);
+}
+
+float randomRange(float minInterval, float maxInterval)
+{
+    return minInterval + randomFloat() * abs(maxInterval - minInterval);
+}
+
+int randomInt(int minInterval, int maxInterval)
+{
+    return int(floor(randomRange(float(minInterval), float(maxInterval))));
 }
 
 vec4 noise3(vec3 v)
@@ -355,10 +376,13 @@ float egg2d(  vec2 p, float ra, float rb )
                               length(vec2(p.x+r,p.y    )) - 2.0*r) - rb;
 }
 
-float sdfFeatherTexture(vec2 uv, float freq, float amp, float radius) {
-    float res = 0.0;
+Material sdfFeatherTexture(vec2 uv, float freq, float amp, float radius, int scatterType) {
+    Material res;
+
+    res.kd = 0.0;
     vec2 period = vec2(1.f / freq);
     float sdf = 100.0;
+    vec2 cell = floor((uv) / period);
     for (int i = -1; i <= 1; i++) {
         for (int j = -1; j <= 1; j++) {
             // Get the coordinate of bottom left corner of cell
@@ -368,47 +392,102 @@ float sdfFeatherTexture(vec2 uv, float freq, float amp, float radius) {
             vec2 repUv = mod(uv + period * vec2(i, j), period) - period * vec2(i, j);
             
             // Egg can at most extend up to the bounds of the 3x3 grid around floor(uv)
-            float egg = egg2d(repUv + hash2vec2(cellNum) * 0.03, amp + hash2vec2(cellNum).x * 0.04, 0.0);
+            float egg = egg2d(repUv + hash2vec2(cellNum) * 0.03,
+                              amp + hash2vec2(cellNum).x * 0.04, 0.0);
             if(egg < 0.001) {
+                cell = cellNum;
                 sdf = egg;
             }
         }
     }
-
     
     // In regular domain repetition, we displace by period so that our repeated coordinate domain goes from -period -> period rather than 0 -> 2*period
-    vec2 cellNum = floor((uv) / period);
-    float r= length(cellNum);
+    //vec2 cellNum = floor((uv) / period);
     
     if(sdf < 0.0) {
-        res = clamp(1.0 + sdf * 9.0, 0.0, 1.0);
+        // Interpolate colors based on SDF
+        res.kd = clamp(1.0 + sdf * 9.0, 0.0, 1.0);
+        
+        if(scatterType == 1) {
+            if(hash2vec2(cell).x < randomRange(0.01, 0.1)) {
+                res.color.r = 1.0;
+            }
+        }
+        else if(scatterType == 2) {
+            float offset = randomRange(0.1, 5.0);
+            float stripeFreq = randomRange(0.2, 1.0);
+            if(mod(cell.x * stripeFreq, 4.0) == 0.0 && sin(cell * stripeFreq + offset).x < randomRange(0.0, 0.2)) {
+                res.color.r = 1.0;
+            }
+        }
+
+        
     } else {
-        res = -1.0;
+        res.kd = -1.0;
     }
     
     return res;
 }
 
-float sinFeatherTexture(vec2 uv, float freq, float amp) {
-    float res = 1.0;
+Material sinFeatherTexture(vec2 uv, float freq, float amp, int scatterType) {
+    Material res;
+
+    res.kd = 1.0;
     float waveInput = freq * uv.x;
-    float waveNum = float( floor(waveInput / (2.0 * pi)));
+    float waveNum = float(floor(waveInput / (2.0 * pi)));
     waveInput = freq * uv.x;
-    //float featherSpacingV = 4.0;
+
     float waveoffset = abs(1.0 * sin(waveInput));
     
+    // Featherwave is the distorted uv y position
     float featherwave = hash1(waveNum * 2030.042) * 20.0
     + uv.y * amp - waveoffset;
     
     float cell = floor(featherwave);
-    float rand = 0.1 + hash3(vec3(cell, cell, cell));
-    
     float f = fract(featherwave);
     f = smoothstep(0.2, 0.8, f);
     
     // Featherwave is the cutoff for the sin function
     f = clamp(f + 0.2, 0.0, 1.0);
-    res = f * waveoffset;
+    res.kd = f * waveoffset;
+    
+    // Scatter type tells you how to vary colors, if desired
+    // Color r channel is used for interpolation between primary and secondary color
+    if(scatterType == 0)
+    {
+        // no scattering (only primary color)
+        res.id = 0;
+    }
+    else if (scatterType >= 1)
+    {
+        // Random scattering
+        float randStripe = hash1(randomFloat() * 2.0 + 0.01 * waveNum);
+        float randStripeV = hash1(randomFloat() * 2.0 + 0.1 * cell);
+        
+        // Smaller is thicker
+        float patternThickness = randomRange(0.3, 1.0);
+        // Determine if wave is in negative or positive part of sine period
+        if(fract(waveInput * patternThickness / (2.0 * pi)) > 0.5
+           && fract(featherwave * patternThickness) < 0.5)
+        {
+            if(scatterType == 1)
+            {
+                if (randStripe < 0.5 && randStripeV < 0.1)
+                {
+                    res.color.r = 1.0;
+                }
+            }
+            else if (scatterType == 2) {
+                if (randStripe < 0.2 &&
+                    cell < randomRange(0.0, 3.0)
+                    && randStripeV < 0.9)
+                {
+                    res.color.r = 1.0;
+                }
+            }
+        }
+
+    }
     
     return res;
 }
@@ -416,14 +495,37 @@ float sinFeatherTexture(vec2 uv, float freq, float amp) {
 //Todo: eyepattern
 Material eyePattern(vec3 p, vec3 normal) {
     Material res;
-    res.color = vec3(1.0);
+    res.color = u_ColorParameters[randomInt(0, 6)];
+    res.kd = 1.0;
+    vec3 mirrorPZ = p;
+    mirrorPZ.z = abs(mirrorPZ.z);
+    float distToEye = sphere(mirrorPZ - eyePos, 0.12);
+    vec3 viewVec = normalize(u_Eye - mirrorPZ);
+    vec3 mirrorNormal = normal;
+    mirrorNormal.z = abs(mirrorNormal.z);
+    if (dot(normalize(vec3(-0.6, 0.2, 1.0)), mirrorNormal) > 0.85) {
+        res.color = vec3(0.0, 0.0, 0.0);
+    }
+    
+    if (dot(normalize(vec3(-0.1, 0.4, 1.0)), mirrorNormal) > 0.97) {
+        res.color = vec3(1.0, 1.0, 1.0);
+    }
+
     return res;
 }
 
 //Todo: beakpattern
 Material beakPattern(vec3 p, vec3 normal) {
-    Material res;
-    res.color = vec3(1.0);
+    Material res = sinFeatherTexture(p.xy, 40.0, 20.0, 0);
+    res.kd = clamp(res.kd +0.4, 0.0, 1.0);
+    float fbm = fbm3(p, 5, 2.0, 6.0, 0.5, 2.0).x;
+
+    vec3 col1 = u_ColorParameters[randomInt(0, 6)];
+    vec3 col2 = u_ColorParameters[randomInt(0, 6)];
+    
+    float distToBeak = smoothstep(0.3, 0.4, distance(beakTipPos, p) * randomRange(0.4, 0.9) + fbm * 0.1);
+
+    res.color = mix(col1, col2, distToBeak);
     return res;
 }
 
@@ -435,30 +537,40 @@ Material featherPattern(vec3 p, vec3 normal, int i) {
 
     // TODO: Make these parameterized
 
-    float[5] featherLayerFreqs = float[5](20.0, 6.8, 13.5, 13.4, 13.4);
-    float[5] featherLayerAmps = float[5](10.0, 6.8, 13.5, 4.4, 4.4);
-
-    float[5] featherLayerRotations = float[5](-20.0, -50.0, -150.0, -50.0, -200.0);
+    float[5] featherLayerFreqs = float[5](randomRange(10.0, 30.0),
+                                          randomRange(10.0, 30.0),
+                                          randomRange(10.0, 30.0),
+                                          randomRange(10.0, 30.0),
+                                          randomRange(10.0, 30.0));
     
-    vec3[5] featherLayerOffsets = vec3[5](wingPos - vec3(5.4,6.0,0.0),
-                                          wingPos - vec3(5.4,5.5,0.0),
-                                          wingPos - vec3(0.6,-0.6,0.0),
-                                          wingPos - vec3(7.9,6.4,0.0),
-                                          headPos  - vec3(0.2,-1.3,0.0));
+    float[5] featherLayerAmps = float[5](randomRange(5.0, 20.0),
+                                         randomRange(5.0, 20.0),
+                                         randomRange(5.0, 20.0),
+                                         randomRange(5.0, 20.0),
+                                         randomRange(5.0, 20.0));
+
+    float[5] featherLayerRotations = float[5](-randomRange(20.0, 150.0),
+                                              -randomRange(20.0, 150.0),
+                                              -randomRange(20.0, 150.0),
+                                              -randomRange(20.0, 150.0),
+                                              -randomRange(20.0, 150.0));
+    
+//    vec3[5] featherLayerOffsets = vec3[5](wingPos - vec3(5.4,6.0,0.0),
+//                                          wingPos - vec3(5.4,5.5,0.0),
+//                                          wingPos - vec3(0.6,-0.6,0.0),
+//                                          wingPos - vec3(7.9,6.4,0.0),
+//                                          headPos  - vec3(0.2,-1.3,0.0));
+    
+    
     int[5] axis = int[5] (1, 1, 1, 1, 2);
     float albedoFactor = 1.0;
-    int[5] featherType = int[5] (0, 0, 1, 1, 0);
-    
-    vec3[5] colors = vec3[5](vec3(0.4, 0.2, 0.1),
-                             vec3(0.1, 0.1, 0.1),
-                             vec3(0.12, 0.1, 0.1),
-                             vec3(0.12, 0.1, 0.11),
-                             vec3(0.6, 0.6, 0.57));
-    
-
+    int[5] featherType = int[5] (randomInt(0, 2),
+                                 randomInt(0, 2),
+                                 randomInt(0, 2),
+                                 randomInt(0, 2),
+                                 randomInt(0, 2));
     
     isectHatch = p;
-    //isectHatch -= featherLayerOffsets[i];
     isectHatch.z = abs(isectHatch.z);
     mat3 rot = rotationAxisAngle(normalize(vec3(0.0, 0.0, 1.0)), featherLayerRotations[i] * degToRad);
     isectHatch = rot * isectHatch;
@@ -467,15 +579,17 @@ Material featherPattern(vec3 p, vec3 normal, int i) {
 
     float f = 1.0;
     if(featherType[i] == 0) {
-        f = sinFeatherTexture(uv, featherLayerFreqs[i], featherLayerAmps[i]);
+        res = sinFeatherTexture(uv, featherLayerFreqs[i], featherLayerAmps[i], randomInt(0, 4));
     } else {
-        f = sdfFeatherTexture(uv, 5.0, 0.2, 3.0);
+        res = sdfFeatherTexture(uv, clamp(featherLayerFreqs[i] * 0.5, 5.0, 6.0), 0.2, 3.0, randomInt(0, 3));
     }
     
     if(f >= 0.0) {
-        f = clamp(f + 0.2, 0.0, 1.0);
-        res.kd = f;
-        res.color = u_ColorParameters[i];
+        res.kd = clamp(res.kd + 0.2, 0.0, 1.0);
+        //res.kd = f;
+        vec3 secondary = u_ColorParameters[randomInt(3, 6)];
+        res.color = mix(u_ColorParameters[i], secondary, res.color.r);
+
     }
     
     return res;
@@ -483,14 +597,14 @@ Material featherPattern(vec3 p, vec3 normal, int i) {
 
 Material getMaterialForId(int id, vec3 p, vec3 normal) {
     Material res;
-    return featherPattern(p, normal, id);
+    //return eyePattern(p, normal);
 
-    if (id == 0) {
-        res.color = vec3(0.9, 0.1, 0.1);
-    } else if (id == 1) {
-        res.color = vec3(0.1, 0.9, 0.1);
-    } else if (id == 2) {
-        res.color = vec3(0.1, 0.1, 0.9);
+    if (id <= 4) {
+        return featherPattern(p, normal, id);
+    } else if (id == 5) {
+        return eyePattern(p, normal);
+    } else if (id == 6) {
+        return beakPattern(p, normal);
     } else if (id == 3) {
         res.color = vec3(0.2, 0.2, 0.2);
     } else if (id == 4) {
@@ -562,6 +676,7 @@ MixedMaterial mixMaterials(MixedMaterial mixedMaterial,
 
 Material getMaterialAtPoint(RaycastQuery query, vec3 normal) {
     vec3 p = query.isect;
+    vec3 uv3 = p;
     float fbm = 0.02 * fbm3(p, 3, 1.0, 1.0, 0.5, 2.0).x;
     MixedMaterial res;
     vec3 mirrorPZ = p;
@@ -572,33 +687,47 @@ Material getMaterialAtPoint(RaycastQuery query, vec3 normal) {
     res.lerpVal = 1.0;
 
     if(query.material == wingMaterial) {
-        float distToWing = smoothstep(0.3, 0.4, distance(wingPos, mirrorPZ) * 0.3 + fbm);
-        res = mixMaterials(res, 3, 1.0 - distToWing);
-        distToWing = smoothstep(0.3, 0.33, distance(wingPos + vec3(0.5, 0.3, 0.0), mirrorPZ) * 0.3 + fbm);
-        res = mixMaterials(res, 4, 1.0 - distToWing);
+        uv3 = p - wingPos;
+        float distToWing = smoothstep(0.3, 0.4, distance(wingPos, mirrorPZ) * randomRange(0.2, 0.42) + fbm);
+        res = mixMaterials(res, randomInt(0, 5), 1.0 - distToWing);
+        distToWing = smoothstep(0.3, 0.4, distance(wingPos + vec3(0.5, 0.3, 0.0), mirrorPZ) * randomRange(0.2, 0.35) + fbm * randomRange(1.0, 1.5));
+        res = mixMaterials(res, randomInt(0, 5), 1.0 - distToWing);
     }
     
-    float distToHead = smoothstep(0.2, 0.5, distance(headPos, p) * 0.2 + fbm);
+    if(query.material == headMaterial) {
+        uv3 = p - headPos;
+    }
+    
+    if(query.material == bodyMaterial) {
+        uv3 = p - bodyPos;
+    }
+    
+    if(query.material == tailMaterial) {
+        uv3 = p - tailBonePos;
+    }
+    
+    float distToHead = smoothstep(0.2, 0.5, distance(headPos, p) * randomRange(0.2, 0.4) + fbm * randomRange(1.0, 6.0));
     res = mixMaterials(res, 0, 1.0 - distToHead);
 
-    float breastDist = distance(breastPos, p) * 0.2;
-    float distToBreast = smoothstep(0.2, 0.21, distance(breastPos, p) * 0.2 + 4.0 * fbm);
-    res = mixMaterials(res, 3, 1.0 - distToBreast);
+    float distToBreast = smoothstep(0.2, 0.21, distance(breastPos, p) * randomRange(0.19, 0.4) + 4.0 * fbm);
+    res = mixMaterials(res, randomInt(0, 5), 1.0 - distToBreast);
         
     // Crown
-    distToHead = smoothstep(0.2, 0.3, distance(headPos + vec3(0.0, 0.9, 0.0), p) * 0.4 + fbm);
-    res = mixMaterials(res, 4, 1.0 - distToHead);
+    distToHead = smoothstep(0.2, 0.3, distance(headPos + vec3(randomRange(0.0, 0.1),
+                                                              randomRange(0.8, 0.9), 0.0), p) * randomRange(0.3, 0.4) + fbm);
+    res = mixMaterials(res, randomInt(0, 5), 1.0 - distToHead);
 
     // Nape
-    distToHead = smoothstep(0.2, 0.3, distance(headPos + vec3(0.6, 0.0, 0.0), p) * 0.45 + fbm);
-    res = mixMaterials(res, 4, 1.0 - distToHead);
+    distToHead = smoothstep(0.1, 0.3, distance(headPos + vec3(0.57, 0.0, 0.0), p) * randomRange(0.36, 0.4) + fbm);
+    res = mixMaterials(res, randomInt(0, 5), 1.0 - distToHead);
 
     // Rump
-    float distToTailbone = smoothstep(0.4, 0.5, distance(tailBonePos + vec3(0.6, 0.0, 0.0), p) * 0.4 + fbm);
-    res = mixMaterials(res, 4, 1.0 - distToTailbone);
+    float distToTailbone = smoothstep(0.4, 0.5, distance(tailBonePos + vec3(0.6, 0.0, 0.0), p) * randomRange(0.3, 0.4) + fbm);
+    res = mixMaterials(res, randomInt(0, 5), 1.0 - distToTailbone);
 
-    float distToEye = smoothstep(0.3, 0.4 , distance(eyePos, mirrorPZ) * 0.98 + fbm * 9.0);
-    res = mixMaterials(res, 4, 1.0 - distToEye);
+    // Eye line
+    float distToEye = smoothstep(0.3, 0.4, distance(eyePos, mirrorPZ) * randomRange(0.9, 1.4) + fbm * randomRange(1.0, 9.0));
+    res = mixMaterials(res, randomInt(0, 5), 1.0 - distToEye);
     
     if(query.material == bodyMaterial) {
         float distToWing = smoothstep(0.3, 0.4, distance(wingPos, mirrorPZ) * 0.7 + fbm);
@@ -608,12 +737,17 @@ Material getMaterialAtPoint(RaycastQuery query, vec3 normal) {
     float footDist = smoothstep(0.6, 0.8, distance(footPos, mirrorPZ) / legHeight + fbm * 3.0);
     res = mixMaterials(res, 2, 1.0 - footDist);
 
-
     if(query.material == eyeMaterial) {
         float distToWing = smoothstep(0.3, 0.4, distance(eyePos, mirrorPZ) * 0.7 + fbm);
-        res = mixMaterials(res, 2, 1.0 - distToWing);
+        res = mixMaterials(res, 5, 1.0 - distToWing);
     }
-    return calcMixedMaterial(res, p, normal);
+    
+    if(query.material == beakMaterial) {
+        //float distToWing = smoothstep(0.3, 0.4, distance(eyePos, mirrorPZ) * 0.7 + fbm);
+        res = mixMaterials(res, 6, 1.0);
+    }
+    
+    return calcMixedMaterial(res, uv3, normal);
 }
 
 
@@ -665,7 +799,7 @@ MapQuery map(vec3 p)
     float frontalSkull = mix(headWidth, beakHeight, 0.6);
     vec3 beakPos = headEndPos + vec3(-frontalSkull, 0.1, 0.0);
 
-    vec3 beakTipPos = beakPos + vec3(-beakLength, 0.0, 0.0);
+    beakTipPos = beakPos + vec3(-beakLength, 0.0, 0.0);
 
     res = smoothMin(res, MapQuery(roundCone(p, headStartPos, headEndPos, headWidth, frontalSkull), headMaterial), 0.2);
 
@@ -752,7 +886,7 @@ MapQuery map(vec3 p)
 
     // Eye
     eyePos = mix(headStartPos, headEndPos, 0.9);
-    eyePos.z = -0.36 + headWidth * 1.0;
+    eyePos.z = -0.36 + frontalSkull * 2.0;
     eyePos.y += headWidth * 0.2;
 
     MapQuery eyeQ = MapQuery(sphere(mirrorPZ - eyePos, 0.1), eyeMaterial);
@@ -958,6 +1092,7 @@ float worley2d(vec2 uv, float xFreq, float yFreq)
 
 
 void main() {
+    randomSeed = u_BirdParameters[11];
     float modTime = mod(u_Time, 100.0 * pi);
 
     float fov = 22.5f;
@@ -1028,12 +1163,12 @@ void main() {
             
             float shadow = 1.0;
             if (pointLights[i].castsShadow) {
-                shadow = softShadow(query.isect + normal * 0.04, lightVec, 0.02, 4.5, 2.0);
+                //shadow = softShadow(query.isect + normal * 0.04, lightVec, 0.02, 4.5, 2.0);
             }
             
-            shadow = clamp(shadow + 0.4, 0.0,1.0);
+            //shadow = clamp(shadow + 0.4, 0.0,1.0);
             //vec3 lightIntensity = 0.6 + shadow * pointLights[i].color * clamp(kd * diffuse + ks * specularIntensity, 0.0, 2.7);
-            vec3 lightIntensity = (0.5 + pointLights[i].color * shadow);
+            vec3 lightIntensity = (0.5 + pointLights[i].color);
 
             //col += lightIntensity * albedo;
             vec3 cc = albedo + pointLights[i].color * lightIntensity * cangianteFactor;
@@ -1058,4 +1193,5 @@ void main() {
     //col = vec3(0.1, 0.6, 0.65) *  sdfFeatherTexture(inFeather * 4.0, 8.0, 1.0);
     out_Col = vec4(col, 1.0);
     out_Disp = vec4(output_kd,ks,birdMask, birdMask);
+    
 }

@@ -31,12 +31,15 @@ class ShaderProgram {
   unifTime: WebGLUniformLocation;
   unifTexture: WebGLUniformLocation;
   unifDepthTexture: WebGLUniformLocation;
+  unifPaperTexture: WebGLUniformLocation;
+
   unifViewProj: WebGLUniformLocation;
   unifBirdParams: WebGLUniformLocation;
   unifColorParams: WebGLUniformLocation;
 
   colorTexture : WebGLUniformLocation;
   depthTexture : WebGLUniformLocation;
+  paperTexture : WebGLUniformLocation;
 
   frameBuffer1 : WebGLUniformLocation;
 
@@ -72,6 +75,7 @@ class ShaderProgram {
     this.unifTime   = gl.getUniformLocation(this.prog, "u_Time");
     this.unifTexture   = gl.getUniformLocation(this.prog, "u_Texture");
     this.unifDepthTexture   = gl.getUniformLocation(this.prog, "u_DepthTexture");
+    this.unifPaperTexture   = gl.getUniformLocation(this.prog, "u_PaperTexture");
 
     this.unifViewProj   = gl.getUniformLocation(this.prog, "u_ViewProj");
     this.unifBirdParams   = gl.getUniformLocation(this.prog, "u_BirdParameters");
@@ -167,6 +171,12 @@ class ShaderProgram {
       gl.uniform1i(this.unifDepthTexture, 1);
     }
 
+    if (this.unifPaperTexture != -1) {
+      gl.activeTexture(gl.TEXTURE2); //GL supports up to 32 different active textures at once(0 - 31)
+      gl.bindTexture(gl.TEXTURE_2D, this.paperTexture);
+      gl.uniform1i(this.unifPaperTexture, 2);
+    }
+
     d.bindIdx();
 
     if(this.frameBufferBound) {
@@ -206,6 +216,12 @@ class ShaderProgram {
     this.use();
     this.depthTexture = texture;
     gl.uniform1i(this.unifDepthTexture, 1);
+  }
+
+  setPaperTexture(texture:WebGLUniformLocation) {
+    this.use();
+    this.depthTexture = texture;
+    gl.uniform1i(this.unifDepthTexture, 2);
   }
 
  frameBufferResize() {

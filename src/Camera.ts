@@ -18,6 +18,10 @@ class Camera {
     this.controls = CameraControls(document.getElementById('canvas'), {
       eye: position,
       center: target,
+      zoomMin : 11.0,
+      zoomMax : 11.0,
+      translateSpeed : 0.0,
+
     });
     vec3.add(this.target, this.position, this.direction);
     mat4.lookAt(this.viewMatrix, this.controls.eye, this.controls.center, this.controls.up);

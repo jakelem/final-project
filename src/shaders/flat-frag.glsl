@@ -19,7 +19,7 @@ int tailMaterial = 4;
 int beakMaterial = 5;
 int eyeMaterial = 6;
 
-vec3 clearColor = vec3(0.96,0.95,0.89);
+vec3 clearColor = vec3(0.98,0.96,0.92);
 
 vec3 headPos = vec3(0.0);
 vec3 wingPos = vec3(0.0);
@@ -32,9 +32,11 @@ vec3 tailBonePos = vec3(0.0);
 float lowerBodyWidth = 0.0;
 vec3 footPos = vec3(0.0, -1.0, 0.0);
 float legHeight = 0.0;
+vec3 groundPos = vec3(2.0, -2.5, 0.0);
 
 float randomSeed = 0.0;
 
+bool insideBoundingSphere = false;
 
 uniform float[20] u_BirdParameters;
 uniform vec3[5] u_ColorParameters;
@@ -78,7 +80,7 @@ struct PointLight
 
 float hash3(vec3 v)
 {
-    return fract(sin(dot(v, vec3(123.5, 258.35, 532.5))) * 3985.3);
+    return fract(sin(dot(v, vec3(343.5, 285.35, 312.5))) * 43758.5453123);
 }
 
 vec2 hash2vec2(vec2 v) {
@@ -93,6 +95,28 @@ vec2 hash2vec2(vec2 v) {
 float hash1(float v)
 {
     return fract(sin(v * 323359.34829489 + v * 9852.555));
+}
+
+vec2 hash2( vec2 p ) // replace this by something better
+{
+    p = vec2( dot(p,vec2(127.1,311.7)), dot(p,vec2(269.5,183.3)) );
+    return -1.0 + 2.0*fract(sin(p)*43758.5453123);
+}
+
+float noise2( in vec2 p )
+{
+    const float K1 = 0.366025404; // (sqrt(3)-1)/2;
+    const float K2 = 0.211324865; // (3-sqrt(3))/6;
+
+    vec2  i = floor( p + (p.x+p.y)*K1 );
+    vec2  a = p - i + (i.x+i.y)*K2;
+    float m = step(a.y,a.x);
+    vec2  o = vec2(m,1.0-m);
+    vec2  b = a - o + K2;
+    vec2  c = a - 1.0 + 2.0*K2;
+    vec3  h = max( 0.5-vec3(dot(a,a), dot(b,b), dot(c,c) ), 0.0 );
+    vec3  n = h*h*h*h*vec3( dot(a,hash2(i+0.0)), dot(b,hash2(i+o)), dot(c,hash2(i+1.0)));
+    return dot( n, vec3(70.0) );
 }
 
 float randomFloat()
@@ -149,16 +173,58 @@ vec4 fbm3(vec3 v, int octaves, float amp, float freq, float pers, float freq_pow
 {
     float sum = 0.f;
     vec3 dv = vec3(0.f,0.f,0.f);
-    float speed = 0.01f;
     for(int i = 0; i < octaves; ++i)
     {
-        amp *= pers;
-        freq *= freq_power;
         vec4 noise = noise3((v) * freq);
         sum += amp * noise.x;
         dv += amp * noise.yzw;
+        amp *= pers;
+        freq *= freq_power;
+
     }
     return vec4(sum, dv);
+}
+
+float fbm2(vec2 v, int octaves, float amp, float freq, float pers, float freq_power)
+{
+    float sum = 0.f;
+    for(int i = 0; i < octaves; ++i)
+    {
+        float noise = noise2((v) * freq);
+        sum += amp * noise;
+        amp *= pers;
+        freq *= freq_power;
+
+    }
+    return sum;
+}
+
+// From https://gamedev.stackexchange.com/questions/59797/glsl-shader-change-hue-saturation-brightness
+vec3 rgb2hsv(vec3 c)
+{
+    vec4 K = vec4(0.0, -1.0 / 3.0, 2.0 / 3.0, -1.0);
+    vec4 p = mix(vec4(c.bg, K.wz), vec4(c.gb, K.xy), step(c.b, c.g));
+    vec4 q = mix(vec4(p.xyw, c.r), vec4(c.r, p.yzx), step(p.x, c.r));
+
+    float d = q.x - min(q.w, q.y);
+    float e = 1.0e-10;
+    return vec3(abs(q.z + (q.w - q.y) / (6.0 * d + e)), d / (q.x + e), q.x);
+}
+
+vec3 hsv2rgb(vec3 c)
+{
+    vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+    vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+    return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+}
+
+vec3 getShadeColor(vec3 albedo) {
+    vec3 shadeColor = rgb2hsv(albedo);
+    shadeColor.g += 0.2;
+    shadeColor.b -= 0.2;
+    shadeColor.r -= 0.1;
+    shadeColor = hsv2rgb(shadeColor);
+    return shadeColor;
 }
 
 MapQuery smoothMin( MapQuery a, MapQuery b, float k)
@@ -376,11 +442,71 @@ float egg2d(  vec2 p, float ra, float rb )
                               length(vec2(p.x+r,p.y    )) - 2.0*r) - rb;
 }
 
+float greyscale(vec3 color) {
+    return (0.2126*color.x + 0.7152*color.g + 0.0722*color.b);
+}
+
+vec2 rotate2D(vec2 v, float angle) {
+    mat2 m = mat2(vec2(cos(angle), sin(angle)), vec2(-sin(angle), cos(angle)));
+    return m * v;
+}
+
+float crossHatch2D(vec2 uv, float lightIntensity) {
+    float res = 1.0;
+    float angle = 0.0;
+    float[4] thresholds = float[4](1.0, 0.1, 0.05, 0.01);
+    float freq = 80.0;
+    for(int i = 0; i < 3; ++i) {
+        if(lightIntensity <= thresholds[i]) {
+            angle += 45.0;
+            vec2 isectHatch = rotate2D(uv, degToRad * angle);
+            float lines = abs(sin(70.0 * isectHatch.y));
+            
+            // Edit how thick/thin strokes are
+            lines = smoothstep(0.4, 0.9, lines);
+            float intervalSize = thresholds[i] - thresholds[i + 1];
+            
+            // Fade hatching between intervals
+            if(lines < 0.5) {
+                lines *= smoothstep(thresholds[i + 1],
+                                    thresholds[i + 1] + intervalSize * 0.1,
+                                    lightIntensity);
+
+            }
+            res = min(res, lines);
+        }
+    }
+    
+    return clamp(res, 0.0, 1.0);
+}
+
+float crossHatch(vec3 p, vec3 normal, float lightIntensity) {
+    float res = 1.0;
+    float fbm = fbm3(p, 4, 1.0, 4.0, 0.5, 2.0).x;
+
+    vec3 isectHatch = p;
+    isectHatch.y += fbm * 0.06;
+    float yLines = crossHatch2D(isectHatch.xy, lightIntensity);//abs(sin(fbm * 3.0 + 70.0 * isectHatch.y));
+    yLines += 0.2;
+    yLines = mix(1.0, yLines, getBias(abs(normal.z), 0.2));
+    
+    isectHatch = p;
+    isectHatch.x += fbm * 0.06;
+
+    float xLines = crossHatch2D(isectHatch.zx, lightIntensity);
+    xLines = mix(xLines, 1.0, getBias(abs(normal.z), 0.3));
+    res *= smoothstep(0.15, 2.0, yLines * xLines);
+    
+    return res;
+
+}
+
+
 Material sdfFeatherTexture(vec2 uv, float freq, float amp, float radius, int scatterType) {
     Material res;
 
     res.kd = 0.0;
-    vec2 period = vec2(1.f / freq);
+    vec2 period = vec2(1.f / freq, 1.3/freq);
     float sdf = 100.0;
     vec2 cell = floor((uv) / period);
     for (int i = -1; i <= 1; i++) {
@@ -393,7 +519,7 @@ Material sdfFeatherTexture(vec2 uv, float freq, float amp, float radius, int sca
             
             // Egg can at most extend up to the bounds of the 3x3 grid around floor(uv)
             float egg = egg2d(repUv + hash2vec2(cellNum) * 0.03,
-                              amp + hash2vec2(cellNum).x * 0.04, 0.0);
+                              amp + hash2vec2(cellNum).x * 0.01, 0.0);
             if(egg < 0.001) {
                 cell = cellNum;
                 sdf = egg;
@@ -496,19 +622,26 @@ Material sinFeatherTexture(vec2 uv, float freq, float amp, int scatterType) {
 Material eyePattern(vec3 p, vec3 normal) {
     Material res;
     res.color = u_ColorParameters[randomInt(0, 6)];
+    vec3 shadeColor = getShadeColor(res.color);
     res.kd = 1.0;
     vec3 mirrorPZ = p;
     mirrorPZ.z = abs(mirrorPZ.z);
-    float distToEye = sphere(mirrorPZ - eyePos, 0.12);
+    vec3 eyeSpace = mirrorPZ - eyePos;
+    float distToEye = sphere(eyeSpace, 0.12);
+
     vec3 viewVec = normalize(u_Eye - mirrorPZ);
     vec3 mirrorNormal = normal;
     mirrorNormal.z = abs(mirrorNormal.z);
-    if (dot(normalize(vec3(-0.6, 0.2, 1.0)), mirrorNormal) > 0.85) {
-        res.color = vec3(0.0, 0.0, 0.0);
-    }
     
-    if (dot(normalize(vec3(-0.1, 0.4, 1.0)), mirrorNormal) > 0.97) {
+
+    
+    float specularFalloff = dot(normalize(vec3(-0.1, 0.4, 1.0)), mirrorNormal);
+    if (specularFalloff > 0.97) {
         res.color = vec3(1.0, 1.0, 1.0);
+    } else if (dot(normalize(viewVec), normalize(vec3(0.05, -0.2, 0.0) + normal)) > 0.89) {
+        res.color = vec3(0.0, 0.0, 0.0);
+    } else {
+        res.color = mix(res.color, shadeColor, specularFalloff);
     }
 
     return res;
@@ -516,8 +649,23 @@ Material eyePattern(vec3 p, vec3 normal) {
 
 //Todo: beakpattern
 Material beakPattern(vec3 p, vec3 normal) {
-    Material res = sinFeatherTexture(p.xy, 40.0, 20.0, 0);
-    res.kd = clamp(res.kd +0.4, 0.0, 1.0);
+   // res.kd = clamp(res.kd + 0.4, 0.0, 1.0);
+
+    vec3 mirrorPZ = p;
+    mirrorPZ.z = abs(p.z);
+    vec3 viewVec = normalize(u_Eye - mirrorPZ);
+
+    Material res;
+    res.kd = 0.5 + sinFeatherTexture(mirrorPZ.xy, 20.0, 20.0, 0).kd;
+    float edge = clamp(dot(viewVec, normal), 0.0, 1.0);
+    //edge = clamp(smoothstep(0.2, 0.9, edge) + 0.3, 0.0, 1.0);
+    float brightness = edge;
+   // res.kd *= 0.2 + smoothstep(0.2, 1.0, 0.1 + edge);
+    float hatch = crossHatch(mirrorPZ, normal, brightness);
+    hatch = clamp(0.4 + smoothstep(0.07, 0.18, hatch), 0.0, 1.0);
+    res.kd *= hatch;
+    res.kd = clamp(0.5 + res.kd, 0.0, 1.2);
+
     float fbm = fbm3(p, 5, 2.0, 6.0, 0.5, 2.0).x;
 
     vec3 col1 = u_ColorParameters[randomInt(0, 6)];
@@ -526,6 +674,7 @@ Material beakPattern(vec3 p, vec3 normal) {
     float distToBeak = smoothstep(0.3, 0.4, distance(beakTipPos, p) * randomRange(0.4, 0.9) + fbm * 0.1);
 
     res.color = mix(col1, col2, distToBeak);
+
     return res;
 }
 
@@ -567,8 +716,8 @@ Material featherPattern(vec3 p, vec3 normal, int i) {
     int[5] featherType = int[5] (randomInt(0, 2),
                                  randomInt(0, 2),
                                  randomInt(0, 2),
-                                 randomInt(0, 2),
-                                 randomInt(0, 2));
+                                 randomInt(0, 3),
+                                 randomInt(0, 3));
     
     isectHatch = p;
     isectHatch.z = abs(isectHatch.z);
@@ -580,17 +729,29 @@ Material featherPattern(vec3 p, vec3 normal, int i) {
     float f = 1.0;
     if(featherType[i] == 0) {
         res = sinFeatherTexture(uv, featherLayerFreqs[i], featherLayerAmps[i], randomInt(0, 4));
-    } else {
-        res = sdfFeatherTexture(uv, clamp(featherLayerFreqs[i] * 0.5, 5.0, 6.0), 0.2, 3.0, randomInt(0, 3));
+    } else if(featherType[i] == 1) {
+        res = sdfFeatherTexture(uv, clamp(featherLayerFreqs[i] * 0.6, 5.0, 6.0), 0.2, 3.0, randomInt(0, 3));
+    } else if (featherType[i] == 2) {
+        res.kd = 1.0;
     }
     
     if(f >= 0.0) {
-        res.kd = clamp(res.kd + 0.2, 0.0, 1.0);
+        res.kd = clamp(res.kd + 0.5, 0.0, 1.0);
         //res.kd = f;
-        vec3 secondary = u_ColorParameters[randomInt(3, 6)];
-        res.color = mix(u_ColorParameters[i], secondary, res.color.r);
-
     }
+    vec3 secondary = u_ColorParameters[randomInt(3, 6)];
+    res.color = mix(u_ColorParameters[i], secondary, res.color.r);
+    
+    if(featherType[i] == 0 || featherType[i] == 1) {
+        vec3 mirrorPZ = p;
+        mirrorPZ.z = abs(p.z);
+        float hatch = crossHatch(mirrorPZ, normal, greyscale(res.kd * res.color));
+        hatch = hatch + 0.5;
+        res.kd *= hatch;
+        res.kd *= 1.4;
+    }
+    
+    
     
     return res;
 }
@@ -731,11 +892,11 @@ Material getMaterialAtPoint(RaycastQuery query, vec3 normal) {
     
     if(query.material == bodyMaterial) {
         float distToWing = smoothstep(0.3, 0.4, distance(wingPos, mirrorPZ) * 0.7 + fbm);
-        res = mixMaterials(res, 2, 1.0 - distToWing);
+        res = mixMaterials(res, randomInt(0, 5), 1.0 - distToWing);
     }
     
     float footDist = smoothstep(0.6, 0.8, distance(footPos, mirrorPZ) / legHeight + fbm * 3.0);
-    res = mixMaterials(res, 2, 1.0 - footDist);
+    res = mixMaterials(res, randomInt(0, 5), 1.0 - footDist);
 
     if(query.material == eyeMaterial) {
         float distToWing = smoothstep(0.3, 0.4, distance(eyePos, mirrorPZ) * 0.7 + fbm);
@@ -768,21 +929,26 @@ MapQuery map(vec3 p)
     float skullLength = u_BirdParameters[8];
     float beakHeight = u_BirdParameters[9];
     float beakLength = u_BirdParameters[10];
+    float wingAngle = u_BirdParameters[12];
+    float wingHeight = u_BirdParameters[13];
+    float wingLength = u_BirdParameters[14];
+    float posture = u_BirdParameters[15];
+    float chestPuff = u_BirdParameters[16];
 
-    vec3 groundPos = vec3(0.0, -1.0, 0.0);
-    vec3 footPos = groundPos + vec3(0.0, 0.0, 0.4);
+    footPos = groundPos + vec3(0.0, 0.0, 0.4);
     bodyPos = groundPos + vec3(0.0, height, 0.0);
 
     lowerBodyWidth = weight * 0.9 + 0.1;
     float breastWidth = weight * 1.2;
     float upperNeckWidth = neckWidth * weight * 0.9;
     float lowerNeckWidth = mix(upperNeckWidth, breastWidth, 0.4);
-    float headWidth = mix(upperNeckWidth, headSize * 0.5 + weight * 0.5, 0.6);
+    float headWidth = mix(upperNeckWidth, headSize * 0.5 + weight * 0.5, 0.7);
 
-    vec3 neckVector = vec3(-0.5, 0.86, 0.0);
+    vec3 neckVector = vec3(sin(posture), cos(posture), 0.0);
+    vec3 bodyVector = normalize (vec3(-1.0 - -weight * 0.1, 0.8 + posture , 0.0));
 
     // Puff out more with weight
-    vec3 neckStartPos = bodyPos + vec3(-1.0 - weight * 0.1, 0.7, -0.0);
+    vec3 neckStartPos = bodyPos + bodyVector *  chestPuff;
     // Body
     MapQuery res = MapQuery(roundCone(p, bodyPos, neckStartPos, lowerBodyWidth, breastWidth), bodyMaterial);
     breastPos = neckStartPos;
@@ -820,7 +986,7 @@ MapQuery map(vec3 p)
     vec3 mirrorPZ = p;
     mirrorPZ.z = abs(mirrorPZ.z);
     
-    vec3 legPos = bodyPos + vec3(-0.7, -0.2, 0.34);
+    vec3 legPos = mix(bodyPos, neckStartPos, 0.2) + vec3(-0.1, -0.5, 0.34);
 
     vec3 kneePos = mix(legPos, footPos, 0.5) + vec3(0.6,-0.1,0.0);
     
@@ -830,7 +996,7 @@ MapQuery map(vec3 p)
                            vec3(-0.2, -0.1, -0.2));
     
     res = smoothMin(res,
-                    MapQuery(roundCone(mirrorPZ, legPos, kneePos, 0.2 + weight * 0.2, 0.1 + weight * 0.1),
+                    MapQuery(roundCone(mirrorPZ, legPos, kneePos, 0.2 + weight * 0.3, 0.1 + weight * 0.1),
                     legMaterial), 0.01);
     
     res = smoothMin(res,
@@ -850,43 +1016,51 @@ MapQuery map(vec3 p)
     vec3 tailPos = tailBonePos + vec3(1.3,0.0, 0.0);
 
     float cutTailFeather = feather(p, tailBonePos, tailPos, 0.4, 0.2, vec3(0.0, 0.2, 0.0), 0.02);
-    res = smoothMin(res, MapQuery(cutTailFeather, tailMaterial), 0.01);
+    //res = smoothMin(res, MapQuery(cutTailFeather, tailMaterial), 0.01);
     
     vec3 tailVec = vec3(cos(tailAngle), sin(tailAngle), 0.0);
     
     vec3 tailCovertStartPos = tailBonePos;
     vec3 tailCovertEndPos = tailCovertStartPos + tailLength * tailVec;
 
-    cutTailFeather = feather(p, tailCovertStartPos, tailCovertEndPos, 0.5 + 0.1 * tailSpread, tailSpread, vec3(0.0, 0.6, 0.0), 0.02);
+    cutTailFeather = feather(p, tailCovertStartPos, tailCovertEndPos, 0.5 + 0.1 * tailSpread, tailSpread, vec3(0.0, 0.6, 0.0), 0.06);
+    //cutTailFeather = roundCone(p, tailCovertStartPos, tailCovertEndPos, 0.5 + 0.1 * tailSpread, tailSpread);
+
     res = smoothMin(res, MapQuery(cutTailFeather, tailMaterial), 0.01);
 
-    
+    float upperWingWidth = 0.2 * breastWidth + wingHeight;
+    float wingOffset = wingHeight;
     // Wings
     vec3 shoulderPos = mix(bodyPos, neckStartPos, 0.9);
     shoulderPos.y += 0.2;
-    shoulderPos.z += mix(lowerBodyWidth, breastWidth, 0.98) * 0.6;
+    shoulderPos.z += breastWidth * 0.6;
+    
     vec3 wingEndPos = mix(bodyPos, neckStartPos, 0.01);
     wingEndPos.z += lowerBodyWidth;
     wingPos = shoulderPos;
 
-    float wing = feather(mirrorPZ, shoulderPos,
-                         wingEndPos, 0.9, 0.7,
-                         vec3(0.0, 0.2, 0.4), 0.01);
+    //shoulderPos.z -= upperWingWidth * 0.2;
+    float wing = roundCone(mirrorPZ, shoulderPos,
+                         wingEndPos, upperWingWidth, 0.5);
 
     res = smoothMin(res, MapQuery(wing, wingMaterial), 0.01);
 
     vec3 wing2Dir = 2.1 * normalize(vec3(2.4, -1.0, lowerBodyWidth * 0.8));
-    vec3 wing2EndPos = wingEndPos + wing2Dir;
+    vec3 wingVec = vec3(cos(wingAngle), sin(wingAngle), 0.0);
+    vec3 wing2EndPos = wingEndPos + wing2Dir * wingLength;
+
 
     float wing2 = feather(mirrorPZ, shoulderPos,
                           wing2EndPos, 0.6, 0.2,
                          vec3(0.0, 0.1, 0.1), 0.01);
 
+
     res = smoothMin(res, MapQuery(wing2, wingMaterial), 0.01);
 
     // Eye
     eyePos = mix(headStartPos, headEndPos, 0.9);
-    eyePos.z = -0.36 + frontalSkull * 2.0;
+    eyePos.z = -0.3 + mix(headWidth * 1.1, frontalSkull * 1.5, skullLength);
+    
     eyePos.y += headWidth * 0.2;
 
     MapQuery eyeQ = MapQuery(sphere(mirrorPZ - eyePos, 0.1), eyeMaterial);
@@ -898,7 +1072,23 @@ MapQuery map(vec3 p)
 
 MapQuery boundedMap(vec3 p)
 {
-    MapQuery boundingBox = MapQuery(sphere(p + vec3(0.0, -3.0, 0.0), 6.0), 0);
+    MapQuery boundingBox = MapQuery(sphere(p - groundPos - vec3(0.0, 4.0, 0.0), 5.7), 0);
+    if(boundingBox.dist < 0.001) {
+        return map(p);
+    }
+    return boundingBox;
+
+}
+
+MapQuery transparentMap(vec3 p) {
+    MapQuery res = MapQuery(roundCone(p, vec3(0.0), vec3(0.0), 0.1, 0.1), bodyMaterial);
+    return res;
+
+}
+
+MapQuery boundedTransparentMap(vec3 p)
+{
+    MapQuery boundingBox = MapQuery(sphere(p - groundPos - vec3(0.0, 3.0, 0.0), 5.7), 0);
     if(boundingBox.dist < 0.001) {
         return map(p);
     }
@@ -915,14 +1105,21 @@ vec3 calcNormals(vec3 p)
     
 }
 
-RaycastQuery raycast(vec3 origin, vec3 dir, int maxSteps)
+RaycastQuery raycast(vec3 origin, vec3 dir, int maxSteps, bool opaque)
 {
-    float t = 0.0;
+    float t = sphere(origin + vec3(1.0, -2.0, 0.0), 5.7);
 
     for(int i = 0; i < maxSteps; ++i)
     {
         vec3 p = origin + t * dir;
-        MapQuery query = boundedMap(p);
+        MapQuery query;
+        if(opaque) {
+            query = boundedMap(p);
+        } else {
+            query = boundedTransparentMap(p);
+        }
+        
+        
 
         if (abs(query.dist) < 0.001) {
             return RaycastQuery(true, p, query.material);
@@ -1006,64 +1203,6 @@ float cubeField(vec3 p) {
     return hash3(floor(p));
 }
 
-float greyscale(vec3 color) {
-    return (0.2126*color.x + 0.7152*color.g + 0.0722*color.b);
-}
-
-vec2 rotate2D(vec2 v, float angle) {
-    mat2 m = mat2(vec2(cos(angle), sin(angle)), vec2(-sin(angle), cos(angle)));
-    return m * v;
-}
-
-float crossHatch2D(vec2 uv, float lightIntensity) {
-    float res = 1.0;
-    float angle = 0.0;
-    float[4] thresholds = float[4](1.0, 0.3, 0.2, 0.1);
-    
-    for(int i = 0; i < 3; ++i) {
-        if(lightIntensity <= thresholds[i]) {
-            angle += 45.0;
-            vec2 isectHatch = rotate2D(uv, degToRad * angle);
-            float lines = abs(sin(70.0 * isectHatch.y));
-            
-            // Edit how thick/thin strokes are
-            lines = smoothstep(0.4, 0.9, lines);
-            float intervalSize = thresholds[i] - thresholds[i + 1];
-            
-            // Fade hatching between intervals
-            if(lines < 0.5) {
-                lines *= smoothstep(thresholds[i + 1] + intervalSize * 0.3,
-                                    thresholds[i + 1] + intervalSize * 0.9,
-                                    lightIntensity);
-
-            }
-            res = min(res, lines);
-        }
-    }
-    
-    return res;
-}
-
-float crossHatch(vec3 p, vec3 normal, float lightIntensity) {
-    float res = 1.0;
-    float fbm = fbm3(p, 4, 1.0, 4.0, 0.5, 2.0).x;
-
-    vec3 isectHatch = p;
-    isectHatch.y += fbm * 0.06;
-    float yLines = crossHatch2D(isectHatch.xy, lightIntensity);//abs(sin(fbm * 3.0 + 70.0 * isectHatch.y));
-    yLines += 0.2;
-    yLines = mix(1.0, yLines, getBias(abs(normal.z), 0.2));
-    
-    isectHatch = p;
-    isectHatch.x += fbm * 0.06;
-
-    float xLines = crossHatch2D(isectHatch.zx, lightIntensity);
-    xLines = mix(xLines, 1.0, getBias(abs(normal.z), 0.3));
-    res *= smoothstep(0.15, 2.0, yLines * xLines);
-    
-    return res;
-
-}
 
 float worley2d(vec2 uv, float xFreq, float yFreq)
 {
@@ -1109,80 +1248,99 @@ void main() {
     vec3 lightPos = vec3(1.0, 0.6, -20.0);
     
     PointLight[3] pointLights;
-    pointLights[0] = PointLight(vec3(-1.0, 9.0, -5.0), 0.9 * vec3(1.00,0.9,0.98), true);
+    pointLights[0] = PointLight(vec3(-1.0, 9.0, -10.0), 0.9 * vec3(1.00,0.9,0.98), true);
     pointLights[1] = PointLight(vec3(-100.0, 0.6, 6.0), 0.75 * vec3(0.2,0.3,0.38), false);
     pointLights[2] = PointLight(vec3(80.0, 0.6, 4.0), 0.77 * vec3(0.2,0.3,0.4), false);
 
-    RaycastQuery query = raycast(u_Eye, dir, 60);
+    RaycastQuery query = raycast(u_Eye, dir, 100, true);
     float a = getBias((fs_Pos.y + 1.0) * 0.5, 0.68);
     
     // Clear color
 
-    vec3 albedo = clearColor;
+    
+    float stains = fbm2(1.0 * vec2(fs_Pos.x * aspect, fs_Pos.y), 4, 1.0, 1.0, 0.5, 2.0);
+    stains = 0.5 * (stains + 1.0);
+    stains = getBias(stains, 0.15);
+    
+    vec3 stainCol = mix(vec3(0.88,0.87,0.77), vec3(0.91,0.85,0.76), (fs_Pos.y + fs_Pos.x) * 0.5);
+    vec3 albedo = mix(clearColor, stainCol, stains);
+    clearColor = albedo;
     vec3 col = albedo;
-    float dilutionFactor = 0.2;
-    float cangianteFactor = 0.5;
+    float dilutionFactor = 0.06;
+    float cangianteFactor = 0.3;
 
     float disp = 0.0;
-    float birdMask = 0.0;
+    float depth = 1.0;
     float kd = 1.0;
     float ks = 0.1;
     float output_kd = 1.0;
-
+    
+    // use 2d noise here
+    float paperHeight = fbm2(vec2(fs_Pos.x * aspect, fs_Pos.y), 4, 1.0, 3.0, 0.5, 2.0);
+    paperHeight = 0.5 * (1.0 + paperHeight);
     if(query.intersected)
     {
-        birdMask = 1.0;
+        depth = distance(u_Eye, query.isect) / 40.0;
         col = vec3(0.0);
         vec3 normal = calcNormals(query.isect);
         //vec3 tangent = normalize(cross(vec3(0,1,0),normal));
         //vec3 bitangent = normalize(cross(normal, tangent));
-        
         Material mat = getMaterialAtPoint(query, normal);
         albedo = mat.color;
-        kd = clamp(mat.kd + 0.3, 0.0, 1.0);
+        kd = mat.kd;
         ks = kd;
-        
 
         vec3 symIsect = vec3(query.isect.xy, abs(query.isect.z));
 
-        float hatch = crossHatch(symIsect, normal, greyscale(albedo * kd));
-        // Hatching Pass
-        kd *= clamp(0.5 + hatch, 0.0, 1.0);
+//        float hatch = crossHatch(symIsect, normal, greyscale(kd * albedo));
+//        //float hatch = crossHatch(symIsect, normal, greyscale(albedo));
+//
+//        // Hatching Pass
+//       // hatch = getBias(hatch, 0.8);
+//        hatch = hatch + 0.5;
+//        kd *= hatch;
+//        kd *= 1.4;
         output_kd = kd;
 
         // TODO: Add subtle fbm to substrate to make it look "old"
         //mat3 tbn = mat3(tangent, bitangent, normal);
         vec3 viewVec = normalize(query.isect - u_Eye.xyz);
-        float cosPow = 28.0;
+        float cosPow = 2.0;
         disp = kd;
-        for (int i = 0; i < 1; ++i) {
-            vec3 lightVec = normalize(pointLights[i].position - query.isect);
-            vec3 h = normalize(lightVec - viewVec);
-            float diffuse = clamp(dot(normal, lightVec), 0.0, 1.0);
-            float specularIntensity = max(pow(max(dot(h, normal), 0.f), cosPow), 0.f);
-            
-            float shadow = 1.0;
-            if (pointLights[i].castsShadow) {
-                //shadow = softShadow(query.isect + normal * 0.04, lightVec, 0.02, 4.5, 2.0);
-            }
-            
-            //shadow = clamp(shadow + 0.4, 0.0,1.0);
-            //vec3 lightIntensity = 0.6 + shadow * pointLights[i].color * clamp(kd * diffuse + ks * specularIntensity, 0.0, 2.7);
-            vec3 lightIntensity = (0.5 + pointLights[i].color);
-
-            //col += lightIntensity * albedo;
-            vec3 cc = albedo + pointLights[i].color * lightIntensity * cangianteFactor;
-            col =  mix(cc, clearColor, clamp(lightIntensity * dilutionFactor, 0.0,1.0));
-            float turb = fbm3(query.isect, 5, 0.6, 1.0, 0.5, 2.0).x;
-
-            col = pigment(col, turb);
-            
-            
-        }
-                
-        // Diffuse Light
-        //col += vec3(0.20, 0.21, 0.23) * albedo;
         
+        vec3 lightPos = u_Eye.xyz;
+        vec3 lightVec = normalize(lightPos - query.isect);
+        vec3 h = normalize(lightVec - viewVec);
+        float diffuse = clamp(dot(normal, lightVec), 0.0, 1.0);
+        float specularIntensity = max(pow(max(dot(h, normal), 0.f), cosPow), 0.f);
+        
+        float shadow = 1.0;
+        if (pointLights[0].castsShadow) {
+            //shadow = softShadow(query.isect + normal * 0.04, lightVec, 0.02, 4.5, 2.0);
+        }
+        
+        diffuse = smoothstep(0.15, 0.3, diffuse +stains);
+        //specularIntensity = smoothstep(0.7, 1.0, specularIntensity + stains);
+
+        //shadow = clamp(shadow + 0.4, 0.0,1.0);
+        //vec3 lightIntensity = 0.6 + shadow * pointLights[i].color * clamp(kd * diffuse + ks * specularIntensity, 0.0, 2.7);
+        vec3 lightIntensity = 0.6 + (pointLights[0].color) * (diffuse);
+
+        //col += lightIntensity * albedo;
+        vec3 cc = albedo + pointLights[0].color * lightIntensity * cangianteFactor;
+        col =  mix(cc, clearColor, clamp(lightIntensity * dilutionFactor, 0.0,1.0));
+        float turb = 0.5 * (1.0 + fbm3(query.isect + vec3(0.5), 5, 1.0, 1.0, 0.5, 2.0).x);
+        turb = 0.25 + turb * 0.45;
+        if(query.material == eyeMaterial) {
+            turb = turb * 0.5;
+        }
+
+        vec3 colPigment = pigment(col, turb);
+//        lightIntensity = (-0.3 + diffuse * kd + ks * specularIntensity * pointLights[0].color);
+//        col = mix(lightIntensity * colPigment, kd * colPigment, 0.9);
+        vec3 shadeColor = getShadeColor(albedo);
+        col = mix(shadeColor, colPigment, kd);
+
     }
         
     //float fbm = fbm3(fs_Pos.xyy, 5, 2.0, 6.0, 0.5, 2.0).x;
@@ -1191,7 +1349,8 @@ void main() {
     //inFeather.x += fbm * 0.01;
     //col = vec3(0.5) * featherTexture(inFeather, 20.0, 9.0);
     //col = vec3(0.1, 0.6, 0.65) *  sdfFeatherTexture(inFeather * 4.0, 8.0, 1.0);
+    
     out_Col = vec4(col, 1.0);
-    out_Disp = vec4(output_kd,ks,birdMask, birdMask);
+    out_Disp = vec4(output_kd,depth,paperHeight, depth);
     
 }

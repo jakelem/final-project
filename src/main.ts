@@ -11,10 +11,20 @@ var randGen = require('random-seed');
 
 // Define an object with application parameters and button callbacks
 // This will be referred to by dat.GUI's functions that add GUI elements.
-const controls = {
-  Weight: 1.1,
+interface ParamList {
+  [index: string]: any
+}
+
+
+const controls : ParamList = {
+  'Weight': 1.1,
+  'Posture': -0.54,
+
   'Neck Length': 1.77,
   'Neck Width': 0.73,
+
+  'Body Length': 1.3,
+
   'Skull Size': 0.5,
   'Skull Length': 0.25,
 
@@ -24,26 +34,23 @@ const controls = {
   'Neck Shape' : 0.0,
 
   // angle about z axis
-  'Back Feather Angle' : -1.0,
-  'Back Feather Spread' : 1.0,
-  'Back Feather Length' : 3.6,
+  'Tail Angle' : -1.0,
+  'Tail Spread' : 1.0,
+  'Tail Length' : 3.0,
 
   // Wing
     // TODO: Create primary and secondary wings in shader
 
   'Leg Height' : 2.5,
 
-  'Upper Wing Covert Length' : 0.0,
-  'Primary Wing Length' : 0.0,
-  'Secondary Wing Length' : 0.0,
-
+  'Wing Spread' : 0.7,
+  'Wing Length' : 1.0,
 
   'Beak Shape' : 0.0,
   'Beak Height' : 0.16,
   'Beak Length' : 1.0,
 
   'Upper Tail Covert Length' : 0.0,
-  'Tail Length' : 0.0,
   'Color 1': [102,51,25],
   'Color 2': [15,15,18],
   'Color 3': [17,15,15],
@@ -51,8 +58,27 @@ const controls = {
   'Color 5': [167,88,10],
 
   'Texture Seed' : 0.0,
-
 };
+
+
+const controlIntervals : ParamList = {
+  'Weight': [0.9, 1.4],
+  'Posture': [-3.1415 * 0.25, 3.1415 * 0.06],
+  'Neck Length': [0.5, 3.0], 
+  'Neck Width': [0.3, 0.8], 
+  'Body Length': [1.0, 1.6],
+  'Skull Size': [0.5, 0.8], 
+  'Skull Length': [0.05, 0.5], 
+  'Beak Height': [0.05, 0.25], 
+  'Beak Length': [0.1, 1.0], 
+  'Tail Angle': [-3.1415 * 0.25, 3.1415 * 0.25], 
+  'Tail Spread': [0.01, 1.3], 
+  'Tail Length': [0.5, 3.4], 
+  'Leg Height': [1.0, 3.0], 
+  'Wing Spread': [0.5, 0.8], 
+  'Wing Length': [0.5, 1.4], 
+
+}
 
 let square: Square;
 let time: number = 0;
@@ -82,7 +108,10 @@ function updateGUI(g : any) {
   }
 }
 
+
 function main() {
+  let rand = randGen.create();
+
   birdParams = new Array<number>();
   colorParams = new Array<number>();
 
@@ -100,50 +129,15 @@ function main() {
 
   const gui = new DAT.GUI();
 
-  gui.add(controls, 'Weight', 0.9, 1.4).onChange( function() {
-    setAllBirdParams()
-  });
-
-  gui.add(controls, 'Neck Length', 0.5, 3.0).onChange( function() {
-    setAllBirdParams()
-  });
-
-  gui.add(controls, 'Neck Width', 0.3, 0.8).onChange( function() {
-    setAllBirdParams()
-  });
-
-  gui.add(controls, 'Skull Size', 0.5, 0.8).onChange( function() {
-    setAllBirdParams()
-  });
-
-  gui.add(controls, 'Skull Length', 0.01, 0.5).onChange( function() {
-    setAllBirdParams()
-  });
-
-  gui.add(controls, 'Beak Height', 0.05, 0.25).onChange( function() {
-    setAllBirdParams()
-  });
-
-  gui.add(controls, 'Beak Length', 0.1, 1.0).onChange( function() {
-    setAllBirdParams()
-  });
-
-  gui.add(controls, 'Back Feather Angle', -3.1415 * 0.25, 3.1415 * 0.25).onChange( function() {
-    setAllBirdParams()
-  });
-
-  gui.add(controls, 'Back Feather Spread', 0.01, 1.3).onChange( function() {
-    setAllBirdParams()
-  });
-
-  gui.add(controls, 'Back Feather Length', 0.01, 5.0).onChange( function() {
-    setAllBirdParams()
-  });
-
-  gui.add(controls, 'Leg Height', 1.0, 3.0).onChange( function() {
-    setAllBirdParams()
-  });
-
+    for (var key in controlIntervals) {
+      gui.add(controls, key, 
+        controlIntervals[key][0], 
+        controlIntervals[key][1]).onChange(function() {
+          setAllBirdParams()
+        });    
+      }
+    
+    
   gui.add(controls, 'Texture Seed').onChange( function() {
     setAllBirdParams()
   });
@@ -167,6 +161,36 @@ function main() {
   gui.addColor(controls, 'Color 5').onChange( function() {
     setAllBirdParams()
   });
+
+function randomColor(scale = 1) {
+  return [scale * rand.floatBetween(0, 255), 
+          scale * rand.floatBetween(0, 255), 
+          scale * rand.floatBetween(0, 255)
+          ];
+}
+
+
+function randomize() {
+  for (var key in controlIntervals) {
+    controls[key] = rand.floatBetween(controlIntervals[key][0], controlIntervals[key][1]);
+  }
+
+  controls['Color 1'] = randomColor(0.8);
+  controls['Color 2'] = randomColor(0.5);
+  controls['Color 3'] = randomColor(0.5);
+  controls['Color 4'] = randomColor(0.8);
+  controls['Color 5'] = randomColor(0.8);
+  controls['Texture Seed'] = rand.floatBetween(0, 200);
+
+  updateGUI(gui)
+  setAllBirdParams()
+
+}
+
+// Initialize here to deal with scope issues
+  var randomizeButton = {'Randomize' : randomize}
+
+  gui.add(randomizeButton, 'Randomize');
 
 
   window.addEventListener('keypress', function (e) {
@@ -206,14 +230,18 @@ function main() {
     birdParams[1] = controls['Neck Length'];  
     birdParams[2] = controls['Neck Width'];  
     birdParams[3] = controls['Skull Size'];  
-    birdParams[4] = controls['Back Feather Angle'];  
-    birdParams[5] = controls['Back Feather Spread'];  
-    birdParams[6] = controls['Back Feather Length'];  
+    birdParams[4] = controls['Tail Angle'];  
+    birdParams[5] = controls['Tail Spread'];  
+    birdParams[6] = controls['Tail Length'];  
     birdParams[7] = controls['Leg Height'];  
     birdParams[8] = controls['Skull Length'];  
     birdParams[9] = controls['Beak Height'];  
     birdParams[10] = controls['Beak Length'];  
     birdParams[11] = controls['Texture Seed'] * 0.0001;  
+    birdParams[13] = controls['Wing Spread'];  
+    birdParams[14] = controls['Wing Length'];  
+    birdParams[15] = controls['Posture'];  
+    birdParams[16] = controls['Body Length'];  
 
     flat.setBirdParams(birdParams);
 
@@ -242,7 +270,7 @@ function main() {
   // Initial call to load scene
   loadScene();
 
-  const camera = new Camera(vec3.fromValues(-7, 1, -10), vec3.fromValues(-4, 1, 0));
+  const camera = new Camera(vec3.fromValues(-4, 0, -12), vec3.fromValues(0, 0, 0));
 
   const renderer = new OpenGLRenderer(canvas);
   renderer.setClearColor(0.0, 1.0, 1.0, 1);

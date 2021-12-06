@@ -122,14 +122,49 @@ Come to class on the due date with a WORKING COPY of your project. We'll be spen
 <p align= "center">
 
 ## Final submission (due 12/6)
-Time to polish! Spen this last week of your project using your generator to produce beautiful output. Add textures, tune parameters, play with colors, play with camera animation. Take the feedback from class critques and use it to take your project to the next level.
 
-Submission:
-- Push all your code / files to your repository
-- Come to class ready to present your finished project
-- Update your README with two sections
-  - final results with images and a live demo if possible
-  - post mortem: how did your project go overall? Did you accomplish your goals? Did you have to pivot?
+#### Final Progress:
+- Added a randomize button that toggles all bird parameters.
+- Made the bird's eyes follow the camera.
+- Added an FBM based paper texture in the background that distorts the bird based on substrate height.
+- Added parameters for wing design, posture, and body length.
+- Enabled flat coloring as a potential random texture on the bird.
+- Added subtle edge darkening/detection.
+- Refined various parameters and fixed bugs to make shading model look more hand-drawn.
+
+#### Output Examples:
+<p align="center">
+<img src="images/m4_bird1.png" alt="drawing" width="400"/>
+</p>
+<p align= "center">
+
+<p align="center">
+<img src="images/m4_bird2.png" alt="drawing" width="400"/>
+</p>
+<p align= "center">
+
+<p align="center">
+<img src="images/m4_bird3.png" alt="drawing" width="400"/>
+</p>
+<p align= "center">
+
+<p align="center">
+<img src="images/m4_bird4.png" alt="drawing" width="400"/>
+</p>
+<p align= "center">
+
+<p align="center">
+<img src="images/m4_bird6.png" alt="drawing" width="400"/>
+</p>
+<p align= "center">
+
+<p align="center">
+<img src="images/m4_bird7.png" alt="drawing" width="400"/>
+</p>
+<p align= "center">
+
+#### Post Mortem:
+I think the project went fairly smoothly, and I got to go deep into SDF design and 2D texture generation in a really fun way. I feel like I accomplished my basic goals of having a generator and shading model, but I definitely feel like both could still be refined with more time. Specifically, I want to add more detail to the bird's feathers and play around with alpha blending in order to render more complex bird designs. I also want to add small refinements like edge blurring and anti aliasing to make the bird as clean as possible. There are also other textures such as fur that I still want to experiment with. Finally, I want to optimize the SDF shader so that the toy can run as smoothly and quickly as possible.  
 
 ## Topic Suggestions
 
